@@ -28,17 +28,3 @@ export interface OrganizationRequest {
   emailDomain: string;
   whitelisted: boolean;
 }
-
-export interface LocationUpdate {
-  latitude: number;
-  longitude: number;
-  tripId: number;
-}
-
-export interface DriverLocation {
-  id: number;
-  driver: { id: number; name: string; email: string };
-  latitude: number;
-  longitude: number;
-  updatedAt: string;
-}

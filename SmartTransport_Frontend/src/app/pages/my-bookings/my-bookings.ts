@@ -81,9 +81,6 @@ import { ToastService } from '../../services/toast.service';
               </div>
               <div class="bcard-actions">
                 <a [routerLink]="['/trip', b.trip.id]" class="act-btn"><i class="bi bi-eye"></i></a>
-                @if (b.status === 'APPROVED') {
-                  <a [routerLink]="['/tracking', b.trip.id]" class="act-btn track"><i class="bi bi-broadcast"></i></a>
-                }
                 @if (b.status === 'PENDING' || b.status === 'APPROVED') {
                   <button class="act-btn danger" (click)="cancel(b.id)"><i class="bi bi-x-circle"></i></button>
                 }

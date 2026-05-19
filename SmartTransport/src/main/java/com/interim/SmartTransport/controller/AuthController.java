@@ -11,8 +11,6 @@ import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -37,21 +35,21 @@ public class AuthController {
     }
 
     @GetMapping("/profile")
-    public ResponseEntity<User> getProfile(@AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(authService.getProfile(userDetails.getUsername()));
+    public ResponseEntity<User> getProfile(@RequestAttribute("userEmail") String email) {
+        return ResponseEntity.ok(authService.getProfile(email));
     }
 
     @PutMapping("/profile")
-    public ResponseEntity<User> updateProfile(@AuthenticationPrincipal UserDetails userDetails,
+    public ResponseEntity<User> updateProfile(@RequestAttribute("userEmail") String email,
                                               @RequestBody RegisterRequest request) {
-        return ResponseEntity.ok(authService.updateProfile(userDetails.getUsername(), request));
+        return ResponseEntity.ok(authService.updateProfile(email, request));
     }
 
     @PostMapping("/profile/picture")
-    public ResponseEntity<User> uploadProfilePicture(@AuthenticationPrincipal UserDetails userDetails,
+    public ResponseEntity<User> uploadProfilePicture(@RequestAttribute("userEmail") String email,
                                                      @RequestParam("file") MultipartFile file) {
         String filename = fileStorageService.storeFile(file, "avatar");
-        User user = authService.getProfile(userDetails.getUsername());
+        User user = authService.getProfile(email);
         user.setProfilePic(filename);
         return ResponseEntity.ok(authService.saveUser(user));
     }

@@ -4,7 +4,6 @@ import { DatePipe } from '@angular/common';
 import { TripService } from '../../services/trip.service';
 import { Trip } from '../../models/trip.model';
 import { ToastService } from '../../services/toast.service';
-import { TrackingService } from '../../services/tracking.service';
 
 @Component({
   selector: 'app-my-trips',
@@ -89,7 +88,6 @@ import { TrackingService } from '../../services/tracking.service';
                     }
                     @if (trip.status === 'ACTIVE') {
                       <button class="tbl-btn warn" (click)="completeTrip(trip.id)" title="Complete"><i class="bi bi-check-circle-fill"></i></button>
-                      <a [routerLink]="['/tracking', trip.id]" class="tbl-btn info" title="Track"><i class="bi bi-broadcast"></i></a>
                     }
                   </div>
                 </td>
@@ -161,7 +159,6 @@ import { TrackingService } from '../../services/tracking.service';
 export class MyTrips implements OnInit {
   private tripService = inject(TripService);
   private toast = inject(ToastService);
-  private geo = inject(TrackingService);
   trips = signal<Trip[]>([]);
   loading = signal(true);
   filter = 'ALL';
@@ -186,11 +183,10 @@ export class MyTrips implements OnInit {
   }
 
   startTrip(id: number) {
-    if (confirm('Start this trip? Passengers will see your live location.')) {
+    if (confirm('Start this trip? Passengers will be notified.')) {
       this.tripService.startTrip(id).subscribe({
         next: () => {
-          this.geo.startGeoTracking(id);
-          this.toast.success('Trip started! Broadcasting your location.');
+          this.toast.success('Trip started!');
           this.loadTrips();
         },
         error: (err) => this.toast.error(err.error?.message || 'Failed to start trip')
@@ -202,7 +198,6 @@ export class MyTrips implements OnInit {
     if (confirm('Mark this trip as completed?')) {
       this.tripService.completeTrip(id).subscribe({
         next: () => {
-          this.geo.stopGeoTracking();
           this.toast.success('Trip completed successfully!');
           this.loadTrips();
         },
@@ -215,7 +210,6 @@ export class MyTrips implements OnInit {
     if (confirm('Are you sure you want to cancel this trip?')) {
       this.tripService.cancelTrip(id).subscribe({
         next: () => {
-          this.geo.stopGeoTracking();
           this.toast.warning('Trip cancelled.');
           this.loadTrips();
         },

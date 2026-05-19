@@ -10,8 +10,6 @@ import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
@@ -32,13 +30,13 @@ public class ChatController {
             @PathVariable Long tripId,
             @RequestParam(required = false) Long receiverId,
             @Valid @RequestBody SendMessageRequest request,
-            @AuthenticationPrincipal UserDetails userDetails) {
+            @RequestAttribute("userEmail") String email) {
 
         ChatMessageDTO msg;
         if (receiverId != null) {
-            msg = chatService.sendMessageToUser(tripId, userDetails.getUsername(), receiverId, request.getContent());
+            msg = chatService.sendMessageToUser(tripId, email, receiverId, request.getContent());
         } else {
-            msg = chatService.sendMessage(tripId, userDetails.getUsername(), request.getContent());
+            msg = chatService.sendMessage(tripId, email, request.getContent());
         }
 
         // Broadcast via WebSocket
@@ -51,16 +49,16 @@ public class ChatController {
     @GetMapping("/{tripId}")
     public ResponseEntity<List<ChatMessageDTO>> getConversation(
             @PathVariable Long tripId,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(chatService.getConversation(tripId, userDetails.getUsername()));
+            @RequestAttribute("userEmail") String email) {
+        return ResponseEntity.ok(chatService.getConversation(tripId, email));
     }
 
     // Mark all messages in trip as read
     @PutMapping("/{tripId}/read")
     public ResponseEntity<Void> markTripAsRead(
             @PathVariable Long tripId,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        chatService.markTripMessagesAsRead(tripId, userDetails.getUsername());
+            @RequestAttribute("userEmail") String email) {
+        chatService.markTripMessagesAsRead(tripId, email);
         return ResponseEntity.ok().build();
     }
 
@@ -68,16 +66,16 @@ public class ChatController {
     @PutMapping("/message/{messageId}/read")
     public ResponseEntity<Void> markAsRead(
             @PathVariable Long messageId,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        chatService.markAsRead(messageId, userDetails.getUsername());
+            @RequestAttribute("userEmail") String email) {
+        chatService.markAsRead(messageId, email);
         return ResponseEntity.ok().build();
     }
 
     // Get total unread count
     @GetMapping("/unread")
     public ResponseEntity<Map<String, Long>> getUnreadCount(
-            @AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(Map.of("count", chatService.getUnreadCount(userDetails.getUsername())));
+            @RequestAttribute("userEmail") String email) {
+        return ResponseEntity.ok(Map.of("count", chatService.getUnreadCount(email)));
     }
 
     // WebSocket: send message via STOMP

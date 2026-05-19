@@ -19,7 +19,6 @@ export const routes: Routes = [
       { path: 'trip/:id', loadComponent: () => import('./pages/trip-detail/trip-detail').then(m => m.TripDetail) },
       { path: 'my-bookings', loadComponent: () => import('./pages/my-bookings/my-bookings').then(m => m.MyBookings) },
       { path: 'notifications', loadComponent: () => import('./pages/notifications/notifications').then(m => m.Notifications) },
-      { path: 'tracking/:tripId', loadComponent: () => import('./pages/tracking/tracking').then(m => m.Tracking) },
       { path: 'chat/:tripId', loadComponent: () => import('./pages/chat/chat').then(m => m.Chat) },
       // Trip management (any user)
       { path: 'create-trip', loadComponent: () => import('./pages/create-trip/create-trip').then(m => m.CreateTrip) },

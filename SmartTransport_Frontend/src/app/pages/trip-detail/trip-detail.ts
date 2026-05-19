@@ -233,9 +233,6 @@ import { Booking } from '../../models/booking.model';
                 </button>
               } @else if (trip()!.status === 'ACTIVE') {
                 <p style="color:rgba(255,255,255,0.4);font-size:0.85rem">This trip is currently active.</p>
-                <a [routerLink]="['/tracking', trip()!.id]" class="track-btn">
-                  <i class="bi bi-broadcast me-1"></i> Track Live
-                </a>
               } @else {
                 <p style="color:rgba(255,255,255,0.4)">This ride is not available for booking.</p>
               }
@@ -255,15 +252,11 @@ import { Booking } from '../../models/booking.model';
                 }
                 @if (trip()!.status === 'ACTIVE') {
                   <button class="btn btn-warning w-100 mb-2" (click)="completeTrip()"><i class="bi bi-check-circle-fill me-1"></i> Complete Trip</button>
-                  <a [routerLink]="['/tracking', trip()!.id]" class="btn btn-info w-100 mb-2" style="color:#fff"><i class="bi bi-broadcast me-1"></i> Live Tracking</a>
                 }
               </div>
             </div>
           }
 
-          @if (trip()!.status === 'ACTIVE') {
-            <a [routerLink]="['/tracking', trip()!.id]" class="track-btn"><i class="bi bi-geo-alt me-1"></i> Track Live</a>
-          }
         </div>
       </div>
     } @else {

@@ -7,8 +7,6 @@ import com.interim.SmartTransport.service.TripService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -21,15 +19,15 @@ public class TripController {
     private final TripService tripService;
 
     @PostMapping
-    public ResponseEntity<List<Trip>> createTrip(@AuthenticationPrincipal UserDetails userDetails,
+    public ResponseEntity<List<Trip>> createTrip(@RequestAttribute("userEmail") String email,
                                                  @Valid @RequestBody TripRequest request) {
-        return ResponseEntity.ok(tripService.createTrip(userDetails.getUsername(), request));
+        return ResponseEntity.ok(tripService.createTrip(email, request));
     }
 
     @GetMapping("/search")
     public ResponseEntity<List<Trip>> searchTrips(TripSearchRequest request,
-                                                  @AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(tripService.searchTrips(request, userDetails.getUsername()));
+                                                  @RequestAttribute("userEmail") String email) {
+        return ResponseEntity.ok(tripService.searchTrips(request, email));
     }
 
     @GetMapping("/{id}")
@@ -38,34 +36,34 @@ public class TripController {
     }
 
     @GetMapping("/my")
-    public ResponseEntity<List<Trip>> getMyTrips(@AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(tripService.getDriverTrips(userDetails.getUsername()));
+    public ResponseEntity<List<Trip>> getMyTrips(@RequestAttribute("userEmail") String email) {
+        return ResponseEntity.ok(tripService.getDriverTrips(email));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<Trip> updateTrip(@PathVariable Long id,
-                                           @AuthenticationPrincipal UserDetails userDetails,
+                                           @RequestAttribute("userEmail") String email,
                                            @Valid @RequestBody TripRequest request) {
-        return ResponseEntity.ok(tripService.updateTrip(id, userDetails.getUsername(), request));
+        return ResponseEntity.ok(tripService.updateTrip(id, email, request));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> cancelTrip(@PathVariable Long id,
-                                           @AuthenticationPrincipal UserDetails userDetails) {
-        tripService.cancelTrip(id, userDetails.getUsername());
+                                           @RequestAttribute("userEmail") String email) {
+        tripService.cancelTrip(id, email);
         return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/{id}/start")
     public ResponseEntity<Trip> startTrip(@PathVariable Long id,
-                                          @AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(tripService.startTrip(id, userDetails.getUsername()));
+                                          @RequestAttribute("userEmail") String email) {
+        return ResponseEntity.ok(tripService.startTrip(id, email));
     }
 
     @PutMapping("/{id}/complete")
     public ResponseEntity<Trip> completeTrip(@PathVariable Long id,
-                                              @AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(tripService.completeTrip(id, userDetails.getUsername()));
+                                              @RequestAttribute("userEmail") String email) {
+        return ResponseEntity.ok(tripService.completeTrip(id, email));
     }
 
     @GetMapping("/{id}/siblings")

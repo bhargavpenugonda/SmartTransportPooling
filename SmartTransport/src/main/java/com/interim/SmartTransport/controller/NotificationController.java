@@ -4,8 +4,6 @@ import com.interim.SmartTransport.model.Notification;
 import com.interim.SmartTransport.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,28 +18,28 @@ public class NotificationController {
 
     @GetMapping
     public ResponseEntity<List<Notification>> getNotifications(
-            @AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(notificationService.getUserNotifications(userDetails.getUsername()));
+            @RequestAttribute("userEmail") String email) {
+        return ResponseEntity.ok(notificationService.getUserNotifications(email));
     }
 
     @GetMapping("/unread-count")
     public ResponseEntity<Map<String, Long>> getUnreadCount(
-            @AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(Map.of("count", notificationService.getUnreadCount(userDetails.getUsername())));
+            @RequestAttribute("userEmail") String email) {
+        return ResponseEntity.ok(Map.of("count", notificationService.getUnreadCount(email)));
     }
 
     @PutMapping("/{id}/read")
     public ResponseEntity<Void> markAsRead(
             @PathVariable Long id,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        notificationService.markAsRead(id, userDetails.getUsername());
+            @RequestAttribute("userEmail") String email) {
+        notificationService.markAsRead(id, email);
         return ResponseEntity.ok().build();
     }
 
     @PutMapping("/read-all")
     public ResponseEntity<Void> markAllRead(
-            @AuthenticationPrincipal UserDetails userDetails) {
-        notificationService.markAllRead(userDetails.getUsername());
+            @RequestAttribute("userEmail") String email) {
+        notificationService.markAllRead(email);
         return ResponseEntity.ok().build();
     }
 }

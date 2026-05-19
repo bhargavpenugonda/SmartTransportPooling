@@ -3,7 +3,6 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../services/auth.service';
 import { ChatService } from '../services/chat.service';
 import { NotificationService } from '../services/notification.service';
-import { TrackingService } from '../services/tracking.service';
 
 @Component({
   selector: 'app-layout',
@@ -206,7 +205,6 @@ export class Layout implements OnInit, OnDestroy {
   auth = inject(AuthService);
   private chatService = inject(ChatService);
   private notifService = inject(NotificationService);
-  private geo = inject(TrackingService);
   sidebarOpen = signal(false);
   unreadCount = signal(0);
   notifCount = signal(0);
@@ -217,7 +215,6 @@ export class Layout implements OnInit, OnDestroy {
   ngOnInit() {
     this.loadUnread();
     this.pollInterval = setInterval(() => this.loadUnread(), 15000);
-    this.geo.resumeIfActive();
   }
 
   ngOnDestroy() {

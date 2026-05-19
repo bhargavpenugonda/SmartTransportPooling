@@ -10,11 +10,8 @@ import com.interim.SmartTransport.repo.OrganizationRepository;
 import com.interim.SmartTransport.repo.PasswordResetTokenRepository;
 import com.interim.SmartTransport.repo.UserRepository;
 import com.interim.SmartTransport.security.JwtTokenProvider;
-import lombok.RequiredArgsConstructor;
+import org.mindrot.jbcrypt.BCrypt;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.authentication.*;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,8 +23,6 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final OrganizationRepository organizationRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
     private final EmailService emailService;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
@@ -37,14 +32,11 @@ public class AuthService {
     private boolean emailVerificationEnabled;
 
     public AuthService(UserRepository userRepository, OrganizationRepository organizationRepository,
-                       PasswordEncoder passwordEncoder, AuthenticationManager authenticationManager,
                        JwtTokenProvider jwtTokenProvider, EmailService emailService,
                        PasswordResetTokenRepository passwordResetTokenRepository,
                        EmailVerificationTokenRepository emailVerificationTokenRepository) {
         this.userRepository = userRepository;
         this.organizationRepository = organizationRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
         this.emailService = emailService;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
@@ -76,7 +68,7 @@ public class AuthService {
         User user = User.builder()
                 .name(request.getName())
                 .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword()))
+                .password(BCrypt.hashpw(request.getPassword(), BCrypt.gensalt()))
                 .phone(request.getPhone())
                 .gender(request.getGender())
                 .department(request.getDepartment())
@@ -101,22 +93,23 @@ public class AuthService {
             emailService.sendEmailVerificationMail(user.getEmail(), verifyToken);
         }
 
-        String token = jwtTokenProvider.generateTokenFromEmail(user.getEmail());
+        String token = jwtTokenProvider.generateToken(user.getEmail());
         return new AuthResponse(token, user.getEmail(), user.getRole().name());
     }
 
     public AuthResponse login(LoginRequest request) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new RuntimeException("Invalid email or password"));
 
-        User user = userRepository.findByEmail(request.getEmail()).orElseThrow();
+        if (!BCrypt.checkpw(request.getPassword(), user.getPassword())) {
+            throw new RuntimeException("Invalid email or password");
+        }
 
         if (emailVerificationEnabled && !user.isEmailVerified()) {
             throw new RuntimeException("Please verify your email before logging in. Check your inbox.");
         }
 
-        String token = jwtTokenProvider.generateToken(authentication);
+        String token = jwtTokenProvider.generateToken(user.getEmail());
         return new AuthResponse(token, user.getEmail(), user.getRole().name());
     }
 
@@ -160,7 +153,7 @@ public class AuthService {
         if (resetToken.isUsed()) throw new RuntimeException("This reset link has already been used");
         if (resetToken.isExpired()) throw new RuntimeException("This reset link has expired");
         User user = resetToken.getUser();
-        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setPassword(BCrypt.hashpw(newPassword, BCrypt.gensalt()));
         userRepository.save(user);
         resetToken.setUsed(true);
         passwordResetTokenRepository.save(resetToken);

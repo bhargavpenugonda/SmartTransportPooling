@@ -6,8 +6,6 @@ import com.interim.SmartTransport.service.VehicleService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,14 +18,14 @@ public class VehicleController {
     private final VehicleService vehicleService;
 
     @PostMapping
-    public ResponseEntity<Vehicle> registerVehicle(@AuthenticationPrincipal UserDetails userDetails,
+    public ResponseEntity<Vehicle> registerVehicle(@RequestAttribute("userEmail") String email,
                                                    @Valid @RequestBody VehicleRequest request) {
-        return ResponseEntity.ok(vehicleService.registerVehicle(userDetails.getUsername(), request));
+        return ResponseEntity.ok(vehicleService.registerVehicle(email, request));
     }
 
     @GetMapping("/my")
-    public ResponseEntity<List<Vehicle>> getMyVehicles(@AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(vehicleService.getDriverVehicles(userDetails.getUsername()));
+    public ResponseEntity<List<Vehicle>> getMyVehicles(@RequestAttribute("userEmail") String email) {
+        return ResponseEntity.ok(vehicleService.getDriverVehicles(email));
     }
 }
 
