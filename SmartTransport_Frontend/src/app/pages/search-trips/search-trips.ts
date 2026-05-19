@@ -49,8 +49,20 @@ interface PlaceSuggestion {
                 }
               </button>
             </div>
-            @if (originFocused() && originSuggestions().length > 0) {
+            @if (originFocused() && (dbOriginSuggestions().length > 0 || originSuggestions().length > 0)) {
               <div class="suggestions-dropdown">
+                @if (dbOriginSuggestions().length > 0) {
+                  <div class="suggestion-section-label"><i class="bi bi-database me-1"></i>From existing trips</div>
+                  @for (name of dbOriginSuggestions(); track name) {
+                    <div class="suggestion-item" (mousedown)="selectDbSuggestion(name, 'origin')">
+                      <i class="bi bi-signpost-2 text-success me-2"></i>
+                      <div><div class="suggestion-main">{{ name }}</div></div>
+                    </div>
+                  }
+                  @if (originSuggestions().length > 0) {
+                    <div class="suggestion-section-label"><i class="bi bi-globe me-1"></i>Other locations</div>
+                  }
+                }
                 @for (s of originSuggestions(); track s.display_name) {
                   <div class="suggestion-item" (mousedown)="selectSuggestion(s, 'origin')">
                     <i class="bi bi-geo-alt text-primary me-2"></i>
@@ -87,8 +99,20 @@ interface PlaceSuggestion {
                 }
               </button>
             </div>
-            @if (destFocused() && destSuggestions().length > 0) {
+            @if (destFocused() && (dbDestSuggestions().length > 0 || destSuggestions().length > 0)) {
               <div class="suggestions-dropdown">
+                @if (dbDestSuggestions().length > 0) {
+                  <div class="suggestion-section-label"><i class="bi bi-database me-1"></i>From existing trips</div>
+                  @for (name of dbDestSuggestions(); track name) {
+                    <div class="suggestion-item" (mousedown)="selectDbSuggestion(name, 'destination')">
+                      <i class="bi bi-signpost-2 text-success me-2"></i>
+                      <div><div class="suggestion-main">{{ name }}</div></div>
+                    </div>
+                  }
+                  @if (destSuggestions().length > 0) {
+                    <div class="suggestion-section-label"><i class="bi bi-globe me-1"></i>Other locations</div>
+                  }
+                }
                 @for (s of destSuggestions(); track s.display_name) {
                   <div class="suggestion-item" (mousedown)="selectSuggestion(s, 'destination')">
                     <i class="bi bi-geo-alt-fill text-danger me-2"></i>
@@ -283,6 +307,7 @@ interface PlaceSuggestion {
     }
     .suggestion-item:hover { background: rgba(108,99,255,0.08); }
     .suggestion-item:last-child { border-bottom: none; }
+    .suggestion-section-label { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 14px 4px; color: rgba(255,255,255,0.35); border-bottom: 1px solid rgba(255,255,255,0.06); }
     .suggestion-main { font-weight: 500; font-size: 0.95rem; }
     .suggestion-detail { font-size: 0.78rem; color: rgba(255,255,255,0.35); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
     .badge { font-size: 0.82rem; padding: 5px 10px; }
@@ -367,8 +392,12 @@ export class SearchTrips implements OnInit, AfterViewInit, OnDestroy {
   destSelected = signal(false);
   originSuggestions = signal<PlaceSuggestion[]>([]);
   destSuggestions = signal<PlaceSuggestion[]>([]);
+  dbOriginSuggestions = signal<string[]>([]);
+  dbDestSuggestions = signal<string[]>([]);
   originFocused = signal(false);
   destFocused = signal(false);
+  private allDbOrigins: string[] = [];
+  private allDbDestinations: string[] = [];
   gpsLoading = signal(false);
   gpsTarget = signal<'origin' | 'destination' | ''>('');
 
@@ -394,6 +423,8 @@ export class SearchTrips implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnInit() {
+    this.tripService.getOrigins().subscribe(o => this.allDbOrigins = o);
+    this.tripService.getDestinations().subscribe(d => this.allDbDestinations = d);
     this.search();
   }
 
@@ -444,8 +475,10 @@ export class SearchTrips implements OnInit, AfterViewInit, OnDestroy {
     this.originFocused.set(true);
     this.originSelected.set(false);
     clearTimeout(this.originSearchTimer);
-    if (val.length < 3) { this.originSuggestions.set([]); return; }
-    this.originSearchTimer = setTimeout(() => this.searchPlaces(val, 'origin'), 400);
+    if (val.length < 2) { this.originSuggestions.set([]); this.dbOriginSuggestions.set([]); return; }
+    const q = val.toLowerCase();
+    this.dbOriginSuggestions.set(this.allDbOrigins.filter(o => o.toLowerCase().includes(q)).slice(0, 5));
+    if (val.length >= 3) this.originSearchTimer = setTimeout(() => this.searchPlaces(val, 'origin'), 400);
   }
 
   onDestSearch(event: Event) {
@@ -454,8 +487,10 @@ export class SearchTrips implements OnInit, AfterViewInit, OnDestroy {
     this.destFocused.set(true);
     this.destSelected.set(false);
     clearTimeout(this.destSearchTimer);
-    if (val.length < 3) { this.destSuggestions.set([]); return; }
-    this.destSearchTimer = setTimeout(() => this.searchPlaces(val, 'destination'), 400);
+    if (val.length < 2) { this.destSuggestions.set([]); this.dbDestSuggestions.set([]); return; }
+    const q = val.toLowerCase();
+    this.dbDestSuggestions.set(this.allDbDestinations.filter(d => d.toLowerCase().includes(q)).slice(0, 5));
+    if (val.length >= 3) this.destSearchTimer = setTimeout(() => this.searchPlaces(val, 'destination'), 400);
   }
 
   private searchPlaces(query: string, target: 'origin' | 'destination') {
@@ -521,6 +556,22 @@ export class SearchTrips implements OnInit, AfterViewInit, OnDestroy {
     }
     this.map.setView([lat, lng], 15, { animate: true });
     this.drawRoute();
+  }
+
+  selectDbSuggestion(name: string, target: 'origin' | 'destination') {
+    if (target === 'origin') {
+      this.filters.origin = name;
+      this.dbOriginSuggestions.set([]);
+      this.originSuggestions.set([]);
+      this.originFocused.set(false);
+      this.originSelected.set(true);
+    } else {
+      this.filters.destination = name;
+      this.dbDestSuggestions.set([]);
+      this.destSuggestions.set([]);
+      this.destFocused.set(false);
+      this.destSelected.set(true);
+    }
   }
 
   // ── GPS ──
@@ -653,6 +704,8 @@ export class SearchTrips implements OnInit, AfterViewInit, OnDestroy {
     this.destSelected.set(false);
     this.originSuggestions.set([]);
     this.destSuggestions.set([]);
+    this.dbOriginSuggestions.set([]);
+    this.dbDestSuggestions.set([]);
   }
 
   // ── Search ──
