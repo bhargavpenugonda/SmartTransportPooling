@@ -144,7 +144,7 @@ SmartTransportPooling solves this by allowing employees to **offer rides** (as d
 
 ### Communication Patterns
 - **REST**: Standard HTTP for all CRUD operations
-- **HTTP Polling**: Frontend polls `/api/notifications/unread-count` every 15 seconds for the bell badge count
+- **HTTP Polling**: Frontend polls `/api/notifications/unread-count` every **60 seconds** for the bell badge count
 - **Async Email**: `@Async` annotation so email sending never blocks API responses
 
 ---
@@ -503,7 +503,7 @@ AND availableSeats > 0
 #### `NotificationService`
 **notify():**
 1. Save `Notification` entity to DB (persisted for the notifications page)
-2. Does not push in real-time — the frontend layout polls `/api/notifications/unread-count` every 15 seconds and updates the bell badge.
+2. Does not push in real-time — the frontend layout polls `/api/notifications/unread-count` every **60 seconds** and updates the bell badge.
 
 #### `EmailService`
 All methods annotated `@Async` — run in a separate thread pool so the HTTP response returns immediately.
@@ -804,7 +804,7 @@ Register new vehicle (shown as pending until admin approves). List own vehicles 
 Edit name, phone, gender, department, city. Upload profile picture. Change password.
 
 #### `notifications.ts`
-Lists all notifications with unread indicator. Notifications are persisted in the DB and fetched via REST API. Mark individual or all as read. Bell badge in the navbar is updated by HTTP polling every 15 seconds.
+Lists all notifications with unread indicator. Notifications are persisted in the DB and fetched via REST API. Mark individual or all as read. Bell badge in the navbar is updated by HTTP polling every **60 seconds**.
 
 #### Admin Pages
 - **`admin/dashboard`**: Stat cards (users, trips, bookings, active trips, pending vehicles, organizations)
@@ -929,7 +929,7 @@ provideHttpClient(withInterceptors([authInterceptor]))
 
 ### Flow 4: Notification Bell Update
 ```
-1. After login, the Layout component starts polling every 15 seconds:
+1. After login, the Layout component starts polling every **60 seconds**:
    GET /api/notifications/unread-count
 
 2. When driver approves booking:
@@ -1002,7 +1002,7 @@ Every midnight (TripReminderService — auto-cancel job):
 - Notifies driver and all affected passengers (TRIP_CANCELLED notification + email)
 
 ### 8. HTTP Polling for Notifications
-- Frontend `Layout` component polls `/api/notifications/unread-count` every 15 seconds
+- Frontend `Layout` component polls `/api/notifications/unread-count` every **60 seconds**
 - Bell badge updates based on the count returned
 - No WebSocket dependency — simpler infrastructure, works across all environments
 
@@ -1076,7 +1076,7 @@ A: Passenger requests booking → if MANUAL mode, status is PENDING; if AUTO mod
 A: AUTO: booking is immediately approved when requested, seats deducted right away. MANUAL: booking waits as PENDING until the driver explicitly approves/rejects it. Seats are only deducted upon approval.
 
 **Q: How does notification work?**
-A: Notifications are saved to the database whenever a booking or trip event occurs (approval, rejection, cancellation, etc.). The frontend `Layout` component polls `/api/notifications/unread-count` every 15 seconds using `setInterval`. When the count increases, the bell badge updates. Users click the bell to view `/notifications` which fetches the full list via REST.
+A: Notifications are saved to the database whenever a booking or trip event occurs (approval, rejection, cancellation, etc.). The frontend `Layout` component polls `/api/notifications/unread-count` every **60 seconds** using `setInterval`. When the count increases, the bell badge updates. Users click the bell to view `/notifications` which fetches the full list via REST.
 
 **Q: Why does Angular use signals instead of Zone.js?**
 A: This is Angular 19's zoneless mode. Zone.js intercepted all async operations to trigger change detection — it adds overhead. With signals, state changes are explicit: `loading.set(true)` tells Angular exactly what changed. The `@if (loading())` template expression tracks the signal and re-renders only when that signal value changes.

@@ -211,7 +211,7 @@ export class Layout implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.loadUnread();
-    this.pollInterval = setInterval(() => this.loadUnread(), 15000);
+    this.pollInterval = setInterval(() => this.loadUnread(), 60000);
   }
 
   ngOnDestroy() {

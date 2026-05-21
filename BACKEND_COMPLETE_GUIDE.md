@@ -248,24 +248,21 @@ Used to allow only whitelisted email domains at registration.
   - excludes trips by same driver
   - only scheduled trips with seats
 
-## 5.5 TripStopRepository
-- `findByTripIdOrderByStopOrder(tripId)`
-
-## 5.6 BookingRepository
+## 5.5 BookingRepository
 - `findByPassengerId(passengerId)`
 - `findByTripId(tripId)`
 - `findByPassengerIdAndStatus(...)`
 - `findByTripIdAndStatus(...)`
 - `existsByTripIdAndPassengerIdAndStatusNot(...)`
 
-## 5.7 NotificationRepository
+## 5.6 NotificationRepository
 - `findByUserIdOrderByCreatedAtDesc(userId)`
 - `countByUserIdAndReadFalse(userId)`
 
-## 5.8 PasswordResetTokenRepository
+## 5.7 PasswordResetTokenRepository
 - `findByToken(token)`
 
-## 5.9 EmailVerificationTokenRepository
+## 5.8 EmailVerificationTokenRepository
 - `findByToken(token)`
 
 ---
@@ -378,7 +375,7 @@ Methods:
 ## 6.5 NotificationService
 - `notify(user, type, title, message, referenceId)`
   - stores notification in DB
-  - does NOT push via WebSocket; frontend polls `/api/notifications/unread-count` every 15 s
+  - does NOT push via WebSocket; frontend polls `/api/notifications/unread-count` every 60 s
 - `getUserNotifications(email)`
 - `getUnreadCount(email)`
 - `markAsRead(notificationId, email)`
