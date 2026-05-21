@@ -26,7 +26,7 @@ import { finalize } from 'rxjs';
           <p>Sign in to continue sharing smarter rides with your colleagues.</p>
           <div class="auth-features">
             <div class="auth-feature"><i class="bi bi-check-circle-fill"></i> Offer or book rides instantly</div>
-            <div class="auth-feature"><i class="bi bi-check-circle-fill"></i> Real-time tracking & chat</div>
+            <div class="auth-feature"><i class="bi bi-check-circle-fill"></i> Real-time booking notifications</div>
             <div class="auth-feature"><i class="bi bi-check-circle-fill"></i> Recurring daily commute support</div>
           </div>
         </div>

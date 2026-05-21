@@ -97,20 +97,7 @@ import { RouterLink } from '@angular/router';
             <h4>Recurring Rides</h4>
             <p>Set up your daily commute once — book all days with one click. Each day runs independently.</p>
           </div>
-          <div class="feature-card">
-            <div class="feature-icon" style="--accent: #f39c12;">
-              <i class="bi bi-broadcast"></i>
-            </div>
-            <h4>Live Tracking</h4>
-            <p>Real-time GPS tracking on an interactive map. Know exactly when your ride arrives.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon" style="--accent: #9b59b6;">
-              <i class="bi bi-chat-dots-fill"></i>
-            </div>
-            <h4>In-Trip Chat</h4>
-            <p>Message your driver or passengers directly within the app. Coordinate meetups easily.</p>
-          </div>
+
           <div class="feature-card">
             <div class="feature-icon" style="--accent: #1abc9c;">
               <i class="bi bi-bell-fill"></i>

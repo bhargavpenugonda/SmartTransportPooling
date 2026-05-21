@@ -31,34 +31,52 @@ import { AppNotification } from '../../models/notification.model';
         <p class="mt-2">No notifications yet</p>
       </div>
     } @else {
-      <div class="list-group">
+      <div class="notif-list">
         @for (n of notifications(); track n.id) {
-          <div class="list-group-item list-group-item-action d-flex align-items-start gap-3 py-3"
-               [class.bg-light]="!n.read"
-               style="cursor: pointer;"
-               (click)="onNotificationClick(n)">
-            <div class="flex-shrink-0">
-              <div class="rounded-circle d-flex align-items-center justify-content-center"
-                   [style.background]="getIconBg(n.type)"
-                   style="width:42px;height:42px;">
-                <i class="bi text-white" [class]="getIcon(n.type)"></i>
-              </div>
+          <div class="notif-item" [class.unread]="!n.read" (click)="onNotificationClick(n)">
+            <div class="notif-icon" [style.background]="getIconBg(n.type)">
+              <i class="bi text-white" [class]="getIcon(n.type)"></i>
             </div>
-            <div class="flex-grow-1">
-              <div class="d-flex justify-content-between">
-                <h6 class="mb-1 fw-bold">{{ n.title }}</h6>
+            <div class="notif-body">
+              <div class="notif-top">
+                <span class="notif-title">{{ n.title }}</span>
                 @if (!n.read) {
-                  <span class="badge bg-primary rounded-pill">New</span>
+                  <span class="badge bg-primary rounded-pill ms-2" style="font-size:0.65rem;">New</span>
                 }
+                <span class="notif-time">{{ n.createdAt | date:'MMM d, h:mm a' }}</span>
               </div>
-              <p class="mb-1 text-muted small">{{ n.message }}</p>
-              <small class="text-muted">{{ n.createdAt | date:'MMM d, h:mm a' }}</small>
+              <p class="notif-msg">{{ n.message }}</p>
             </div>
           </div>
         }
       </div>
     }
-  `
+  `,
+  styles: [`
+    .notif-list { display: flex; flex-direction: column; gap: 10px; }
+    .notif-item {
+      display: flex; align-items: flex-start; gap: 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px; padding: 14px 16px; cursor: pointer;
+      transition: background 0.2s;
+    }
+    .notif-item:hover { background: rgba(255,255,255,0.08); }
+    .notif-item.unread {
+      background: rgba(108,99,255,0.10);
+      border-color: rgba(108,99,255,0.25);
+    }
+    .notif-icon {
+      width: 42px; height: 42px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .notif-body { flex: 1; min-width: 0; }
+    .notif-top { display: flex; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 4px; }
+    .notif-title { font-weight: 600; color: rgba(255,255,255,0.92); font-size: 0.95rem; }
+    .notif-time { margin-left: auto; font-size: 0.75rem; color: rgba(255,255,255,0.4); white-space: nowrap; }
+    .notif-msg { margin: 0; font-size: 0.85rem; color: rgba(255,255,255,0.6); line-height: 1.4; }
+  `]
 })
 export class Notifications implements OnInit {
   private notifService = inject(NotificationService);

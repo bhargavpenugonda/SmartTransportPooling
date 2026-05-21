@@ -6,13 +6,10 @@ import com.interim.SmartTransport.model.enums.NotificationType;
 import com.interim.SmartTransport.repo.NotificationRepository;
 import com.interim.SmartTransport.repo.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -20,7 +17,6 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
-    private final SimpMessagingTemplate messagingTemplate;
 
     public void notify(User user, NotificationType type, String title, String message, Long referenceId) {
         Notification n = Notification.builder()
@@ -31,17 +27,6 @@ public class NotificationService {
                 .referenceId(referenceId)
                 .build();
         notificationRepository.save(n);
-
-        // Push via WebSocket
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("id", n.getId());
-        payload.put("type", type.name());
-        payload.put("title", title);
-        payload.put("message", message);
-        payload.put("referenceId", referenceId != null ? referenceId : 0L);
-        payload.put("createdAt", n.getCreatedAt().toString());
-        String destination = "/topic/user/" + user.getId() + "/notifications";
-        messagingTemplate.convertAndSend(destination, (Object) payload);
     }
 
     public List<Notification> getUserNotifications(String email) {

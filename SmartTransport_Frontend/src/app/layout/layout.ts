@@ -1,7 +1,6 @@
 import { Component, computed, inject, signal, OnInit, OnDestroy } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../services/auth.service';
-import { ChatService } from '../services/chat.service';
 import { NotificationService } from '../services/notification.service';
 
 @Component({
@@ -203,10 +202,8 @@ import { NotificationService } from '../services/notification.service';
 })
 export class Layout implements OnInit, OnDestroy {
   auth = inject(AuthService);
-  private chatService = inject(ChatService);
   private notifService = inject(NotificationService);
   sidebarOpen = signal(false);
-  unreadCount = signal(0);
   notifCount = signal(0);
   isAdmin = computed(() => this.auth.currentRole() === 'ADMIN');
   defaultRoute = computed(() => this.isAdmin() ? '/admin/dashboard' : '/dashboard');
@@ -223,10 +220,6 @@ export class Layout implements OnInit, OnDestroy {
 
   private loadUnread() {
     if (this.isAdmin()) return;
-    this.chatService.getUnreadCount().subscribe({
-      next: res => this.unreadCount.set(res.count),
-      error: () => {}
-    });
     this.notifService.getUnreadCount().subscribe({
       next: res => this.notifCount.set(res.count),
       error: () => {}
