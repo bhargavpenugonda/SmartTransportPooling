@@ -19,19 +19,21 @@ Backend project path:
 - `SmartTransport/`
 
 Tech stack:
-- Spring Boot
-- Spring Data JPA + MySQL
-- JWT authentication
-- WebSocket (STOMP + SockJS) for real-time chat/notifications
+- Spring Boot 4.0.6
+- Spring Data JPA + MySQL 8
+- JWT authentication (jjwt 0.12.6)
+- BCrypt password hashing (jbcrypt 0.4)
 - JavaMail for email flows
+- Scheduled tasks for trip reminders and auto-cancellation
 
 Typical request flow:
 1. Frontend calls REST API on port `8081`.
 2. `JwtAuthenticationFilter` checks token for protected routes.
 3. Controller receives request and calls Service.
-4. Service applies business rules and calls Repository.
+4. Service applies business rules (including past-date validation) and calls Repository.
 5. Repository runs DB operations (JPA methods / JPQL queries).
 6. Controller returns JSON response.
+7. `TripReminderService` runs background jobs (reminder every 15 min, auto-cancel at midnight).
 
 ---
 
@@ -145,19 +147,7 @@ Fields:
 - `bookedDays`
 - `bookedAt`
 
-## 3.6 ChatMessage
-Private message inside trip context.
-
-Fields:
-- `id`
-- `trip`
-- `sender`
-- `receiver`
-- `content`
-- `sentAt`
-- `readAt` (null = unread)
-
-## 3.7 Notification
+## 3.6 Notification
 In-app notification.
 
 Fields:
@@ -170,7 +160,7 @@ Fields:
 - `read`
 - `createdAt`
 
-## 3.8 Organization
+## 3.7 Organization
 Allowed organization domain for registration.
 
 Fields:
@@ -180,7 +170,7 @@ Fields:
 - `whitelisted`
 - `createdAt`
 
-## 3.9 PasswordResetToken
+## 3.8 PasswordResetToken
 For reset-password email flow.
 
 Fields:
@@ -191,7 +181,7 @@ Fields:
 - `used`
 - helper: `isExpired()`
 
-## 3.10 EmailVerificationToken
+## 3.9 EmailVerificationToken
 For email verification flow.
 
 Fields:
@@ -220,7 +210,6 @@ Fields:
   - `TRIP_STARTED`
   - `TRIP_COMPLETED`
   - `TRIP_REMINDER`
-  - `CHAT_MESSAGE`
 
 ---
 
@@ -269,19 +258,14 @@ Used to allow only whitelisted email domains at registration.
 - `findByTripIdAndStatus(...)`
 - `existsByTripIdAndPassengerIdAndStatusNot(...)`
 
-## 5.7 ChatMessageRepository
-- `findConversation(tripId, userId)`
-- `countUnread(userId)`
-- `countUnreadByTrip(tripId, userId)`
-
-## 5.8 NotificationRepository
+## 5.7 NotificationRepository
 - `findByUserIdOrderByCreatedAtDesc(userId)`
 - `countByUserIdAndReadFalse(userId)`
 
-## 5.9 PasswordResetTokenRepository
+## 5.8 PasswordResetTokenRepository
 - `findByToken(token)`
 
-## 5.10 EmailVerificationTokenRepository
+## 5.9 EmailVerificationTokenRepository
 - `findByToken(token)`
 
 ---
@@ -391,32 +375,16 @@ Methods:
   - if approved, restores seats
   - marks `CANCELLED`
 
-## 6.5 ChatService
-- `sendMessage(tripId, senderEmail, content)`
-  - passenger -> driver allowed directly
-  - driver without receiver id is blocked (must use explicit receiver)
-- `sendMessageToUser(tripId, senderEmail, receiverId, content)`
-  - validates sender and receiver are trip participants
-  - saves message
-  - creates notification for receiver
-- `getConversation(tripId, userEmail)`
-- `markAsRead(messageId, userEmail)`
-- `markTripMessagesAsRead(tripId, userEmail)`
-- `getUnreadCount(userEmail)`
-
-Participant validation rule:
-- user must be trip driver OR approved passenger on that trip.
-
-## 6.6 NotificationService
+## 6.5 NotificationService
 - `notify(user, type, title, message, referenceId)`
   - stores notification in DB
-  - pushes real-time payload to `/topic/user/{userId}/notifications`
+  - does NOT push via WebSocket; frontend polls `/api/notifications/unread-count` every 15 s
 - `getUserNotifications(email)`
 - `getUnreadCount(email)`
 - `markAsRead(notificationId, email)`
 - `markAllRead(email)`
 
-## 6.7 EmailService
+## 6.6 EmailService
 Async mail sender methods:
 - `sendPasswordResetEmail`
 - `sendEmailVerificationMail`
@@ -425,12 +393,12 @@ Async mail sender methods:
 - `sendTripCancelledEmail`
 - `sendTripReminderEmail`
 
-## 6.8 FileStorageService
+## 6.7 FileStorageService
 - creates upload directory from `app.upload-dir` (default `uploads`)
 - `storeFile(file, prefix)` -> returns generated filename
 - `getFilePath(filename)`
 
-## 6.9 AdminService
+## 6.8 AdminService
 - organization CRUD
 - pending vehicle list and approval
 - stats counts:
@@ -441,11 +409,18 @@ Async mail sender methods:
   - pending vehicles
   - total organizations
 
-## 6.10 TripReminderService
-Scheduled task every 15 minutes:
+## 6.9 TripReminderService
+Two scheduled jobs:
+
+**Reminder job** — `@Scheduled(fixedRate = 900000)` (every 15 minutes):
 - finds `SCHEDULED` trips departing in next 1 hour
-- notifies driver and approved passengers
-- emails reminders to passengers
+- notifies driver and approved passengers (in-app notification + email)
+
+**Auto-cancel job** — `@Scheduled(cron = "0 0 0 * * *")` (midnight daily):
+- finds `SCHEDULED` trips where `departureTime.toLocalDate().isBefore(today)`
+- cancels each trip (status → `CANCELLED`)
+- cancels all `PENDING` and `APPROVED` bookings
+- sends `TRIP_CANCELLED` notification to driver and all affected passengers
 
 ---
 
@@ -750,43 +725,9 @@ Purpose: mark all current user's notifications read.
 
 ---
 
-## 7.6 Chat APIs (`/api/chat`)
+## 7.6 Admin APIs (`/api/admin`) [ADMIN only]
 
-### 34. POST `/api/chat/{tripId}`
-Purpose: send message in trip context.
-
-Auth: required.
-Query param:
-- `receiverId` (optional)
-Body (`SendMessageRequest`):
-- `content` (required, max 1000)
-
-Behavior:
-- passenger without receiverId -> sent to driver
-- driver must pass receiverId
-- creates DB message + notification
-- broadcasts real-time to `/topic/chat/{tripId}`
-
-### 35. GET `/api/chat/{tripId}`
-Purpose: get conversation for current user in given trip.
-
-### 36. PUT `/api/chat/{tripId}/read`
-Purpose: mark all unread messages in trip as read for current user.
-
-### 37. PUT `/api/chat/message/{messageId}/read`
-Purpose: mark one message as read.
-
-### 38. GET `/api/chat/unread`
-Purpose: total unread chat count for current user.
-
-Response example:
-- `{ "count": 3 }`
-
----
-
-## 7.7 Admin APIs (`/api/admin`) [ADMIN only]
-
-### 39. GET `/api/admin/stats`
+### 34. GET `/api/admin/stats`
 Purpose: admin dashboard stats.
 
 Returns map with keys:
@@ -797,7 +738,7 @@ Returns map with keys:
 - `pendingVehicles`
 - `totalOrganizations`
 
-### 40. POST `/api/admin/organizations`
+### 35. POST `/api/admin/organizations`
 Purpose: create allowed organization domain.
 
 Body (`OrganizationRequest`):
@@ -805,42 +746,24 @@ Body (`OrganizationRequest`):
 - `emailDomain`
 - `whitelisted`
 
-### 41. GET `/api/admin/organizations`
+### 36. GET `/api/admin/organizations`
 Purpose: list all organizations.
 
-### 42. PUT `/api/admin/organizations/{id}`
+### 37. PUT `/api/admin/organizations/{id}`
 Purpose: update organization.
 
-### 43. DELETE `/api/admin/organizations/{id}`
+### 38. DELETE `/api/admin/organizations/{id}`
 Purpose: delete organization.
 
-### 44. GET `/api/admin/vehicles/pending`
+### 39. GET `/api/admin/vehicles/pending`
 Purpose: list unapproved vehicles.
 
-### 45. PUT `/api/admin/vehicles/{id}/approve`
+### 40. PUT `/api/admin/vehicles/{id}/approve`
 Purpose: approve a vehicle.
 
 ---
 
-## 8) WebSocket Endpoints (Real-Time)
-
-Connection endpoint:
-- `/ws` (with SockJS fallback also configured)
-
-Broker/topic prefixes:
-- server receives app messages on `/app/*`
-- clients subscribe to `/topic/*`
-
-Chat real-time:
-- client send: `/app/chat/{tripId}`
-- server publish: `/topic/chat/{tripId}`
-
-Notification real-time:
-- server publish: `/topic/user/{userId}/notifications`
-
----
-
-## 9) Error Handling Format
+## 8) Error Handling Format
 
 Global exception handling (`GlobalExceptionHandler`):
 
@@ -875,7 +798,7 @@ JWT auth errors from filter:
 
 ---
 
-## 10) Important Config Values (`application.properties`)
+## 9) Important Config Values (`application.properties`)
 
 - DB: MySQL `smart_transport`
 - JPA: `ddl-auto=update`
@@ -886,7 +809,7 @@ JWT auth errors from filter:
 
 ---
 
-## 11) Practical API Usage Order (Recommended)
+## 10) Practical API Usage Order (Recommended)
 
 Typical end-to-end flow for a new user:
 1. `POST /api/auth/register`
@@ -896,31 +819,26 @@ Typical end-to-end flow for a new user:
    - Admin approves via `PUT /api/admin/vehicles/{id}/approve`
    - `POST /api/trips`
 4. Passenger side:
-   - `GET /api/trips/search`
-   - `POST /api/bookings/{tripId}`
+   - `GET /api/trips/search` (only future SCHEDULED trips returned)
+   - `POST /api/bookings/{tripId}` (blocked if trip has departed)
 5. Driver handles bookings:
    - `PUT /api/bookings/{id}/approve` or `/reject`
-6. Live communication:
-   - `POST /api/chat/{tripId}` and websocket `/topic/chat/{tripId}`
-7. Trip lifecycle:
+6. Trip lifecycle:
    - `PUT /api/trips/{id}/start`
    - `PUT /api/trips/{id}/complete`
-8. Notifications:
+7. Notifications:
    - `GET /api/notifications`
    - `PUT /api/notifications/read-all`
 
 ---
 
-## 12) Notes and Caveats
+## 11) Notes and Caveats
 
 - Admin role cannot be self-created from register API.
 - Vehicle must be approved before being used in trip creation.
 - Trip update/cancel is blocked within 30 minutes before departure.
-- `GET /api/bookings/trip/{tripId}` currently has no explicit owner/admin check in controller/service; frontend should avoid exposing this to unrelated users.
-- Chat participant validation is strict in `sendMessageToUser`: user must be driver or approved passenger.
-
----
-
-If you want, I can also create:
-- a Swagger-style API quick sheet (request/response examples for each endpoint), or
-- a DB relationship diagram (ER-style) in Markdown/Mermaid.
+- Search results only include trips where `departureTime > CURRENT_TIMESTAMP`.
+- Booking is rejected by the backend if the trip departure time has already passed.
+- Trip creation is rejected if `departureTime` is in the past (frontend also enforces via datetime-local `min` attribute).
+- Expired SCHEDULED trips are automatically cancelled at midnight by the auto-cancel scheduler.
+- `GET /api/bookings/trip/{tripId}` has no explicit non-driver check; frontend should restrict access.

@@ -12,12 +12,11 @@
 5. [Backend — Deep Dive](#5-backend--deep-dive)
    - 5.1 Entry Point & Configuration
    - 5.2 Security Layer (JWT + Filter)
-   - 5.3 WebSocket Configuration
-   - 5.4 Controllers
-   - 5.5 Services
-   - 5.6 Repositories
-   - 5.7 DTOs
-   - 5.8 Models & Enums
+   - 5.3 Controllers
+   - 5.4 Services
+   - 5.5 Repositories
+   - 5.6 DTOs
+   - 5.7 Models & Enums
 6. [Frontend — Deep Dive](#6-frontend--deep-dive)
    - 6.1 Architecture & Setup
    - 6.2 Routing & Guards
@@ -61,15 +60,14 @@ SmartTransportPooling solves this by allowing employees to **offer rides** (as d
 ### Backend
 | Technology | Version | Purpose |
 |---|---|---|
-| Java | 17+ | Programming language |
-| Spring Boot | 3.x | Application framework |
-| Spring Data JPA | 3.x | ORM for database operations |
+| Java | 21 | Programming language |
+| Spring Boot | 4.0.6 | Application framework |
+| Spring Data JPA | Latest | ORM for database operations |
 | Hibernate | 6.x | JPA implementation |
 | MySQL | 8.x | Relational database |
-| JWT (jjwt) | 0.12.x | Stateless authentication tokens |
+| JWT (jjwt) | 0.12.6 | Stateless authentication tokens |
 | BCrypt (jbcrypt) | 0.4 | Password hashing |
 | JavaMailSender | Built-in | Sending emails via SMTP |
-| Spring WebSocket / STOMP | Built-in | Real-time chat & notifications |
 | Lombok | Latest | Boilerplate reduction (@Builder, @Getter, etc.) |
 | Maven | 3.x | Build tool |
 
@@ -80,8 +78,7 @@ SmartTransportPooling solves this by allowing employees to **offer rides** (as d
 | TypeScript | 5.x | Typed JavaScript |
 | Bootstrap 5 | 5.3 | CSS framework for layout |
 | Bootstrap Icons | 1.x | Icon library |
-| Leaflet.js | 1.x | Interactive maps |
-| SockJS + STOMP | Latest | WebSocket client |
+| Leaflet.js | 1.9 | Interactive maps |
 | RxJS | 7.x | Reactive programming |
 | Angular Signals | Built-in | Reactive state management |
 
@@ -120,8 +117,8 @@ SmartTransportPooling solves this by allowing employees to **offer rides** (as d
 │  ┌──────────────────────────────────────────┐          │
 │  │           REST Controllers               │          │
 │  │  /api/auth  /api/trips  /api/bookings    │          │
-│  │  /api/admin  /api/chat  /api/vehicles    │          │
-│  │  /api/notifications                      │          │
+│  │  /api/admin  /api/vehicles                │          │
+│  │  /api/notifications                        │          │
 │  └──────────────┬───────────────────────────┘          │
 │                 ▼                                       │
 │  ┌──────────────────────────────────────────┐          │
@@ -147,7 +144,7 @@ SmartTransportPooling solves this by allowing employees to **offer rides** (as d
 
 ### Communication Patterns
 - **REST**: Standard HTTP for all CRUD operations
-- **WebSocket (STOMP)**: Real-time push for notifications (`/topic/user/{id}/notifications`) and chat (`/topic/chat/{tripId}`)
+- **HTTP Polling**: Frontend polls `/api/notifications/unread-count` every 15 seconds for the bell badge count
 - **Async Email**: `@Async` annotation so email sending never blocks API responses
 
 ---
@@ -257,18 +254,6 @@ In-app notification records.
 | read | BOOLEAN | Read status |
 | created_at | DATETIME | |
 
-#### `chat_messages`
-Messages between driver and passenger within a trip context.
-| Column | Type | Purpose |
-|---|---|---|
-| id | BIGINT PK | |
-| trip_id | FK → trips | Context of the chat |
-| sender_id | FK → users | |
-| receiver_id | FK → users | |
-| content | TEXT | Message text |
-| sent_at | DATETIME | |
-| read_at | DATETIME NULL | NULL means unread |
-
 #### `password_reset_tokens` & `email_verification_tokens`
 Temporary one-time-use tokens for secure password reset and email verification flows.
 
@@ -280,6 +265,7 @@ users ──< vehicles (one user can own many vehicles)
 trips ──< bookings (one trip can have many bookings)
 trips ──< trip_stops (one trip can have many stops)
 vehicles >── trips (one vehicle assigned to many trips)
+users ──< notifications (one user has many notifications)
 organizations (standalone - just domain whitelist)
 ```
 
@@ -367,31 +353,7 @@ The project uses manual `FilterRegistrationBean` instead of `WebSecurityConfigur
 
 ---
 
-### 5.3 WebSocket Configuration
-
-**`WebSocketConfig.java`**
-```java
-config.enableSimpleBroker("/topic");          // In-memory message broker
-config.setApplicationDestinationPrefixes("/app"); // Client sends to /app/...
-registry.addEndpoint("/ws").withSockJS();    // Fallback for older browsers
-```
-
-**Topics used in the app:**
-| Topic | Purpose |
-|---|---|
-| `/topic/chat/{tripId}` | Real-time chat messages for a specific trip |
-| `/topic/user/{userId}/notifications` | Push notifications to a specific user |
-
-**How a real-time notification works:**
-1. Driver approves booking
-2. `BookingService.approveBooking()` calls `notificationService.notify(passenger, ...)`
-3. `NotificationService.notify()` saves notification to DB AND calls `messagingTemplate.convertAndSend("/topic/user/"+userId+"/notifications", payload)`
-4. Frontend Angular service subscribed to that topic receives the push immediately
-5. Bell icon badge updates without page refresh
-
----
-
-### 5.4 Controllers
+### 5.3 Controllers
 
 #### `AuthController` — `/api/auth`
 | Endpoint | Method | Auth | Purpose |
@@ -445,22 +407,11 @@ registry.addEndpoint("/ws").withSockJS();    // Fallback for older browsers
 
 **Why admin is at filter level?** The `JwtAuthenticationFilter` checks the role and returns `403` before the request even reaches the controller. No Spring Security annotations needed.
 
-#### `ChatController` — `/api/chat`
-| Endpoint | Purpose |
-|---|---|
-| POST `/{tripId}` | Send message (REST) |
-| GET `/{tripId}` | Get conversation history |
-| PUT `/{tripId}/read` | Mark all trip messages read |
-| GET `/unread` | Total unread message count |
-| WebSocket `@MessageMapping("/chat/{tripId}")` | Send via STOMP |
-
-**Dual mechanism**: Messages can be sent via REST (simpler) or WebSocket STOMP. Both broadcast to `/topic/chat/{tripId}` so all connected clients see it live.
-
 #### `NotificationController` — `/api/notifications`
 | Endpoint | Purpose |
 |---|---|
 | GET `/` | Get all notifications for user |
-| GET `/unread-count` | Badge count |
+| GET `/unread-count` | Badge count (polled every 15 s by frontend) |
 | PUT `/{id}/read` | Mark single notification read |
 | PUT `/read-all` | Mark all read |
 
@@ -551,9 +502,8 @@ AND availableSeats > 0
 
 #### `NotificationService`
 **notify():**
-1. Save `Notification` entity to DB (persists for the notifications page)
-2. Push via WebSocket: `messagingTemplate.convertAndSend("/topic/user/{userId}/notifications", payload)`
-- Frontend subscribed to this topic shows the badge update instantly
+1. Save `Notification` entity to DB (persisted for the notifications page)
+2. Does not push in real-time — the frontend layout polls `/api/notifications/unread-count` every 15 seconds and updates the bell badge.
 
 #### `EmailService`
 All methods annotated `@Async` — run in a separate thread pool so the HTTP response returns immediately.
@@ -568,12 +518,16 @@ All methods annotated `@Async` — run in a separate thread pool so the HTTP res
 | `sendTripReminderEmail` | 1 hour before departure (scheduled) |
 
 #### `TripReminderService`
-- `@Scheduled(fixedRate = 900000)` — runs every 15 minutes
-- Finds all SCHEDULED trips departing in the next 1 hour
-- For each such trip: notifies the driver + all APPROVED passengers
-- Sends reminder email to each approved passenger
+- `@Scheduled(fixedRate = 900000)` — runs every 15 minutes:
+  - Finds all SCHEDULED trips departing in the next 1 hour
+  - For each: notifies the driver + all APPROVED passengers + sends reminder email
+- `@Scheduled(cron = "0 0 0 * * *")` — runs at midnight every day:
+  - Finds all SCHEDULED trips whose departure date is before today (expired without starting)
+  - Cancels each trip (status → CANCELLED)
+  - Cancels all PENDING/APPROVED bookings on those trips
+  - Notifies driver + all affected passengers (TRIP_CANCELLED)
 
-**Why scheduled?** Ensures passengers never miss a trip even if they haven't opened the app.
+**Why scheduled?** Ensures passengers never miss a trip even if they haven't opened the app. Auto-cancel prevents ghost trips from cluttering search results.
 
 #### `AdminService`
 **Organization management**: Full CRUD. Domain must be unique. `whitelisted=true` is what allows registration.
@@ -583,19 +537,7 @@ All methods annotated `@Async` — run in a separate thread pool so the HTTP res
 **getStats()**: Counts from each repository — used for the admin dashboard overview.
 
 #### `ChatService`
-**sendMessage (passenger → driver):** Receiver is automatically trip's driver.
-
-**sendMessageToUser:** Both sender and receiver must be validateChatParticipant — either the driver or have an APPROVED booking on that trip.
-
-**getConversation:** Uses custom JPQL:
-```sql
-SELECT m FROM ChatMessage m 
-WHERE m.trip.id = :tripId 
-AND (m.sender.id = :userId OR m.receiver.id = :userId)
-ORDER BY m.sentAt
-```
-
-**markTripMessagesAsRead:** Sets `readAt = now()` on all messages where receiver is the current user.
+Removed — chat feature is not part of the current version.
 
 #### `VehicleService`
 Simple: create vehicle with `approved=false`, list by driver. Admin manually approves.
@@ -618,7 +560,6 @@ All repositories extend `JpaRepository<Entity, Long>` which provides:
 | `VehicleRepository` | `findByUserId()`, `findByApprovedFalse()` |
 | `OrganizationRepository` | `existsByEmailDomainAndWhitelistedTrue()`, `findByEmailDomain()` |
 | `NotificationRepository` | `findByUserIdOrderByCreatedAtDesc()`, `countByUserIdAndReadFalse()` |
-| `ChatMessageRepository` | `findConversation()` (custom query by tripId + userId) |
 
 **Why Spring Data JPA?**
 - Method names are auto-converted to SQL (`findByEmail` → `WHERE email = ?`)
@@ -639,8 +580,6 @@ All repositories extend `JpaRepository<Entity, Long>` which provides:
 | `BookingRequest` | seats, bookingType, bookedDays | Request a booking |
 | `VehicleRequest` | licensePlate, model, color, totalSeats, licenseDocUrl | Register vehicle |
 | `OrganizationRequest` | name, emailDomain, whitelisted | Admin org management |
-| `ChatMessageDTO` | id, tripId, senderId, senderName, receiverId, content, sentAt, readAt | Chat message response |
-| `SendMessageRequest` | content | Send chat message body |
 | `ForgotPasswordRequest` | email | Forgot password |
 | `ResetPasswordRequest` | token, newPassword | Reset password |
 
@@ -662,7 +601,7 @@ All repositories extend `JpaRepository<Entity, Long>` which provides:
 | `BookingType` | SINGLE, RECURRING |
 | `ApprovalMode` | MANUAL, AUTO |
 | `Gender` | MALE, FEMALE, OTHER |
-| `NotificationType` | BOOKING_REQUESTED, BOOKING_APPROVED, BOOKING_REJECTED, TRIP_STARTED, TRIP_COMPLETED, TRIP_REMINDER, TRIP_CANCELLED |
+| `NotificationType` | BOOKING_REQUESTED, BOOKING_APPROVED, BOOKING_REJECTED, TRIP_STARTED, TRIP_COMPLETED, TRIP_REMINDER, TRIP_CANCELLED, BOOKING_CANCELLED |
 
 **JPA Annotations used:**
 - `@Entity` — marks as a database table
@@ -767,14 +706,8 @@ return payload.exp * 1000 > Date.now(); // check expiry
 
 #### `NotificationService`
 - `getNotifications()` → GET `/api/notifications`
-- `getUnreadCount()` → GET `/api/notifications/unread-count`
+- `getUnreadCount()` → GET `/api/notifications/unread-count` (called every 15 s by `Layout` to update badge)
 - `markAsRead(id)` / `markAllRead()` → PUT
-
-#### `WebSocketService`
-- Connects to backend WebSocket endpoint `/ws` using SockJS + STOMP
-- **`subscribeToNotifications(userId, callback)`** → subscribes to `/topic/user/{userId}/notifications`
-- **`subscribeToChat(tripId, callback)`** → subscribes to `/topic/chat/{tripId}`
-- Reconnects on disconnect
 
 #### `VehicleService`
 - `getMyVehicles()` → GET `/api/vehicles/my`
@@ -871,10 +804,7 @@ Register new vehicle (shown as pending until admin approves). List own vehicles 
 Edit name, phone, gender, department, city. Upload profile picture. Change password.
 
 #### `notifications.ts`
-Lists all notifications with unread indicator. Mark individual or all as read.
-
-#### `chat.ts`
-Real-time chat page within a trip context. Subscribes to WebSocket topic on load.
+Lists all notifications with unread indicator. Notifications are persisted in the DB and fetched via REST API. Mark individual or all as read. Bell badge in the navbar is updated by HTTP polling every 15 seconds.
 
 #### Admin Pages
 - **`admin/dashboard`**: Stat cards (users, trips, bookings, active trips, pending vehicles, organizations)
@@ -894,8 +824,6 @@ Real-time chat page within a trip context. Subscribes to WebSocket topic on load
 **`vehicle.model.ts`**: id, user(User), licensePlate, model, color, totalSeats, approved
 
 **`notification.model.ts`**: id, type, title, message, referenceId, read, createdAt
-
-**`chat.model.ts`**: id, tripId, senderId, senderName, receiverId, content, sentAt, readAt
 
 **`other.model.ts`**: Organization, PlaceSuggestion (for map autocomplete)
 
@@ -972,6 +900,7 @@ provideHttpClient(withInterceptors([authInterceptor]))
 
 2. GET /api/trips/search → TripRepository.searchTrips()
    - Filters by city, date, price, gender, availability
+   - Only returns SCHEDULED trips where departureTime > NOW (past trips excluded)
    - Excludes driver's own trips
    - Returns matching trips
 
@@ -980,10 +909,11 @@ provideHttpClient(withInterceptors([authInterceptor]))
    - Sets seats → fare calculated live
 
 4. Clicks "Book 1 Seat" → POST /api/bookings/{tripId}
+   - Backend validates trip has not departed yet
    - If AUTO mode: immediately APPROVED, seats deducted
    - If MANUAL mode: status = PENDING
    
-5. Driver gets notification (WebSocket push + DB record)
+5. Driver gets notification (saved to DB)
    "New booking request from [Passenger Name]"
 
 6. Driver goes to /trip-bookings/:id
@@ -993,33 +923,37 @@ provideHttpClient(withInterceptors([authInterceptor]))
 7. PUT /api/bookings/{id}/approve
    - Status → APPROVED
    - Seats deducted from trip
-   - Passenger notified via WebSocket
+   - Passenger notification saved to DB
    - Email sent to passenger: "Your booking is approved!"
 ```
 
-### Flow 4: Real-Time Notification
+### Flow 4: Notification Bell Update
 ```
-1. Frontend WebSocket connects:
-   ws://localhost:8081/ws (SockJS)
+1. After login, the Layout component starts polling every 15 seconds:
+   GET /api/notifications/unread-count
 
-2. After login, subscribe:
-   /topic/user/{userId}/notifications
+2. When driver approves booking:
+   - NotificationService saves Notification to DB
+   - On next poll, unread count response increases
 
-3. When driver approves booking:
-   Spring: messagingTemplate.convertAndSend("/topic/user/"+userId, payload)
-
-4. Angular callback fires instantly:
-   → unread count badge on bell icon increments
-   → notification appears in /notifications page
+3. Bell icon badge updates with the new count
+4. User clicks bell → /notifications → sees all notifications
 ```
 
-### Flow 5: Trip Reminder
+### Flow 5: Trip Reminder & Auto-Cancel
 ```
-Every 15 minutes (TripReminderService):
+Every 15 minutes (TripReminderService — reminder job):
 1. Find all SCHEDULED trips departing in next 60 minutes
 2. For each trip:
-   - Notify driver (WebSocket + DB)
-   - For each APPROVED passenger: notify (WebSocket + DB) + send email
+   - Notify driver (DB)
+   - For each APPROVED passenger: notify (DB) + send reminder email
+
+Every midnight (TripReminderService — auto-cancel job):
+1. Find all SCHEDULED trips where departureTime.date < today
+2. For each expired trip:
+   - Status → CANCELLED
+   - All PENDING/APPROVED bookings → CANCELLED
+   - Notify driver + all passengers (TRIP_CANCELLED)
 ```
 
 ---
@@ -1056,18 +990,28 @@ Every 15 minutes (TripReminderService):
 - All linked by same `recurringGroupId` UUID
 - Passenger can book all days or just one day
 
-### 6. Real-Time WebSocket
-- STOMP over SockJS
-- Notifications pushed immediately on booking events
-- Chat messages delivered in real-time
-- In-memory broker (no external message queue needed for this scale)
+### 6. Past-Trip Validation
+- **Search**: Only trips where `departureTime > CURRENT_TIMESTAMP` appear in search results
+- **Booking**: Backend rejects booking attempts on already-departed trips
+- **Creation**: Frontend enforces a `min` datetime on the date picker; backend validates `departureTime` is in the future
 
-### 7. Email Notifications (@Async)
+### 7. Midnight Auto-Cancel Scheduler
+- `@Scheduled(cron = "0 0 0 * * *")` runs at midnight daily
+- Finds all SCHEDULED trips whose departure date has passed without starting
+- Cancels the trip and all PENDING/APPROVED bookings automatically
+- Notifies driver and all affected passengers (TRIP_CANCELLED notification + email)
+
+### 8. HTTP Polling for Notifications
+- Frontend `Layout` component polls `/api/notifications/unread-count` every 15 seconds
+- Bell badge updates based on the count returned
+- No WebSocket dependency — simpler infrastructure, works across all environments
+
+### 9. Email Notifications (@Async)
 - All email methods run in separate thread pool
 - HTTP response returned before email is sent
 - Gmail SMTP with app password (2FA required on Google account)
 
-### 8. Angular Signals (Zoneless)
+### 10. Angular Signals (Zoneless)
 - No Zone.js = no monkey-patching of Promise/setTimeout
 - State changes explicitly via `signal.set(value)`
 - Only signal-based reads in templates trigger re-render
@@ -1131,8 +1075,8 @@ A: Passenger requests booking → if MANUAL mode, status is PENDING; if AUTO mod
 **Q: What is the difference between MANUAL and AUTO approval?**
 A: AUTO: booking is immediately approved when requested, seats deducted right away. MANUAL: booking waits as PENDING until the driver explicitly approves/rejects it. Seats are only deducted upon approval.
 
-**Q: How does real-time notification work?**
-A: Spring WebSocket with STOMP protocol. On approval/rejection events, the backend calls `messagingTemplate.convertAndSend("/topic/user/{userId}/notifications", payload)`. The frontend Angular service subscribes to this STOMP topic on login and updates signals when a message arrives, causing the notification badge to update instantly.
+**Q: How does notification work?**
+A: Notifications are saved to the database whenever a booking or trip event occurs (approval, rejection, cancellation, etc.). The frontend `Layout` component polls `/api/notifications/unread-count` every 15 seconds using `setInterval`. When the count increases, the bell badge updates. Users click the bell to view `/notifications` which fetches the full list via REST.
 
 **Q: Why does Angular use signals instead of Zone.js?**
 A: This is Angular 19's zoneless mode. Zone.js intercepted all async operations to trigger change detection — it adds overhead. With signals, state changes are explicit: `loading.set(true)` tells Angular exactly what changed. The `@if (loading())` template expression tracks the signal and re-renders only when that signal value changes.
@@ -1144,7 +1088,7 @@ A: BCrypt hashing — `BCrypt.hashpw(password, BCrypt.gensalt())` on registratio
 A: The `organizations` table stores email domains with a `whitelisted` boolean. On registration, we extract the domain from the email: `email.substring(email.indexOf("@")+1)`. Then `organizationRepository.existsByEmailDomainAndWhitelistedTrue(domain)` must return true, otherwise registration throws "domain not whitelisted".
 
 **Q: How is the trip search JPQL query built?**
-A: `TripRepository.searchTrips()` uses a single JPQL query with optional parameters (null = skip that filter). It filters by: status=SCHEDULED, partial-match origin/destination (including stop names via EXISTS subquery), date range, price range, driver's gender, driver's city, and excludes the calling user's own trips. Only trips with `availableSeats > 0` are shown.
+A: `TripRepository.searchTrips()` uses a single JPQL query with optional parameters (null = skip that filter). It filters by: `status = SCHEDULED AND departureTime > CURRENT_TIMESTAMP`, partial-match origin/destination (including stop names via EXISTS subquery), date range, price range, driver's gender, driver's city, and excludes the calling user's own trips. Only trips with `availableSeats > 0` are shown. Past trips are excluded by the `departureTime > CURRENT_TIMESTAMP` condition.
 
 **Q: What is the recurring trip feature?**
 A: When creating a recurring trip, the driver specifies days like "MON,WED,FRI". The backend generates one `Trip` entity for each matching day in the next 7 days. All are linked by the same `recurringGroupId` UUID. A passenger can book just today (SINGLE) or all days (RECURRING). The RECURRING booking iterates through all sibling trips and books each.
@@ -1158,8 +1102,10 @@ A: In `JwtAuthenticationFilter`, if the request path starts with `/api/admin` an
 **Q: How are emails sent without slowing down the API?**
 A: All email methods in `EmailService` are annotated with `@Async`. Spring runs them in a separate thread pool. The HTTP response returns to the client immediately while the email is being composed and sent in the background.
 
-**Q: How does the trip reminder work?**
-A: `TripReminderService` has a method with `@Scheduled(fixedRate=900000)` (every 15 minutes). It queries all SCHEDULED trips departing in the next 1 hour and sends in-app notifications and emails to approved passengers and the driver.
+**Q: How does the trip reminder and auto-cancel work?**
+A: `TripReminderService` has two scheduled methods:
+1. `@Scheduled(fixedRate=900000)` (every 15 minutes) — finds all SCHEDULED trips departing in the next 1 hour and sends notifications and emails to the driver and approved passengers.
+2. `@Scheduled(cron="0 0 0 * * *")` (midnight daily) — finds all SCHEDULED trips whose departure date is before today (started but never marked started), cancels them, cancels all PENDING/APPROVED bookings, and notifies everyone affected.
 
 **Q: What is CORS and how is it handled?**
 A: Cross-Origin Resource Sharing — browsers block requests from one origin (localhost:4200) to another (localhost:8081) by default. The `SecurityConfig` registers a `CorsFilter` at the highest priority that allows requests from `http://localhost:4200` with all HTTP methods and headers.
@@ -1172,4 +1118,4 @@ A: The backend filter returns 401 Unauthorized. The Angular `AuthService.isLogge
 
 ---
 
-*This document covers the complete technical depth of SmartTransportPooling — backend, frontend, database, security, real-time, email, and scheduling. Use it as a reference for explaining any aspect of the system in interviews.*
+*This document covers the complete technical depth of SmartTransportPooling — backend, frontend, database, security, scheduling, email, and polling notifications. Use it as a reference for explaining any aspect of the system in interviews.*
